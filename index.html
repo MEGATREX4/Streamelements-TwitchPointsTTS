@@ -30,7 +30,7 @@ var rewards = {
 // -----------------
 var testTTSOnLoad = true;
  // режим налагодження для тестування. true = F5 для відтворення тексту
- // false = нічого. Залиште значення false, якщо ви не плануєте змінювати код.
+ // false = нічого. Встановіть значення false, якщо ви не плануєте змінювати код.
 
 var testTTS = "Поговори мені ще 😡"; // назва нагороди
 var testText = "Бот працює"; // текст для перервірки
@@ -45,7 +45,7 @@ async function textToSpeech(reward, text) {
     // Limit text length
     text = text.substring(0, reward["ttsCharacterLimit"]);
 
-    console.log("TTS text:", text);
+    console.log("Текст TTS:", text);
 
     let url;
     let requestOptions;
@@ -59,7 +59,7 @@ async function textToSpeech(reward, text) {
     if (reward["type"] == "streamelements") {
         url = `https://api.streamelements.com/kappa/v2/speech?voice=${reward["voiceId"]}&text=${sendText}`;
     } else {
-        throw "TTS type not found";
+        throw "Тип TTS не знайдено";
     }
 
     // fetch() повертає обіцянку, що
@@ -96,7 +96,7 @@ window.onload = () => {
 
                 let reward = rewards[notif.title];
                 if (reward && notif.text != "") {
-                    console.log("Грає TTS");
+                    console.log("Програється TTS");
                     try {
                         await textToSpeech(reward, notif.text);
                         console.log("TTS закінчено");
