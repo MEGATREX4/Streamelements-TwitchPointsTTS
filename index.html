@@ -7,39 +7,54 @@
 </head>
 <body>
     <script>
-// Параментри
+// Параметри
 var channelId = "174860188"; // ідентифікатор вашого каналу Twitch
 var currentUsername = "test_user"; // Змінна для зберігання поточного імені користувача
 var customtext = " каже "; // Каже можна замінити на будь що буде виглядати так [Ім'я користувача] + [ця змінна] + [текст повідомлення]
+var canStop = true; // Налаштування для зупинки TTS
 
 // Нагороди
 var rewards = {
     "Поговори мені ще 😡": {
-        // назва винагороди (має збігатися з назвою винагороди у Twitch  з урахуванням регістру)
+        // назва винагороди (має збігатися з назвою винагороди у Twitch з урахуванням регістру)
         ttsCharacterLimit: 500, // максимальна кількість символів для відправки
         type: "streamelements", // це не чіпайте
         voiceId: "uk-UA-Wavenet-A", // ідентифікатор голосу, можете змінити на іншу мову, але цей говорить українською та латинкою/англійською
-        volume: 0.40, // гучність  вимірюється 0.0 - 1.0
+        volume: 0.40, // гучність вимірюється 0.0 - 1.0
+    },
+    "Зупини TTS": {
+        // нагорода для зупинки TTS
+        type: "stop",
     },
 };
-
-
 
 // -----------------
 // ПАРАМЕТРИ НАЛАГОДЖЕННЯ
 // -----------------
 var testTTSOnLoad = true;
- // режим налагодження для тестування. true = F5 для відтворення тексту
- // false = нічого. Встановіть значення false, якщо ви не плануєте змінювати код.
+// режим налагодження для тестування. true = F5 для відтворення тексту
+// false = нічого. Встановіть значення false, якщо ви не плануєте змінювати код.
 
 var testTTS = "Поговори мені ще 😡"; // назва нагороди
-var testText = "Бот працює"; // текст для перервірки
+var testText = "Бот працює"; // текст для перевірки
 
 function sleep(miliseconds) {
     return new Promise((res) => setTimeout(res, miliseconds));
 }
 
+let currentAudioSource = null; // Тримаємо посилання на поточне аудіоджерело
+let stopTTS = false; // Змінна для зупинки TTS
+
 async function textToSpeech(reward, text) {
+    if (reward.type === "stop") {
+        if (canStop && currentAudioSource) {
+            currentAudioSource.stop();
+            currentAudioSource = null;
+            console.log("TTS зупинено");
+        }
+        return;
+    }
+
     const ctx = new AudioContext();
 
     // Limit text length
@@ -75,9 +90,22 @@ async function textToSpeech(reward, text) {
     const source = ctx.createBufferSource();
     source.buffer = audio;
     source.connect(gainNode);
+    currentAudioSource = source; // Зберегти поточне аудіоджерело
     source.start();
     return new Promise((resolve, reject) => {
-        source.onended = resolve;
+        source.onended = () => {
+            currentAudioSource = null; // Скинути після завершення
+            resolve();
+        };
+        source.onended = () => {
+            if (stopTTS) {
+                currentAudioSource = null; // Скинути після завершення
+                stopTTS = false; // Скинути прапорець зупинки
+                resolve();
+            } else {
+                resolve();
+            }
+        };
     });
 }
 
@@ -154,15 +182,26 @@ window.onload = () => {
                                     currentUsername = msg.data.redemption.user.display_name;
 
                                     let notif = {
-                                    title: reward.title,
-                                    price: reward.cost,
-                                    user: msg.data.redemption.user.display_name,
-                                    // Включаємо ім'я користувача в текст
-                                    text: `${currentUsername}${customtext}${msg.data.redemption.user_input}`, 
-                                };
+                                        title: reward.title,
+                                        price: reward.cost,
+                                        user: msg.data.redemption.user.display_name,
+                                        // Включаємо ім'я користувача в текст
+                                        text: `${currentUsername}${customtext}${msg.data.redemption.user_input}`, 
+                                    };
                                     console.log("Сповіщення в черзі ", notif);
                                     console.log("Користувач ", currentUsername);
-                                    notifications.push(notif);
+                                    
+                                    // Негайна обробка "Зупини TTS"
+                                    if (notif.title === "Зупини TTS" && canStop) {
+                                        stopTTS = true;
+                                        if (currentAudioSource) {
+                                            currentAudioSource.stop();
+                                            currentAudioSource = null;
+                                            console.log("TTS зупинено");
+                                        }
+                                    } else {
+                                        notifications.push(notif);
+                                    }
                                     break;
                             }
                             break;
@@ -212,7 +251,6 @@ window.onload = () => {
 
     connect();
 };
-
 
 </script>
 </body>
