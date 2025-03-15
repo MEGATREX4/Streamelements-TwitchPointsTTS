@@ -4,254 +4,327 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Нагороди Twitch TTS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Налаштування для більш точного контролю над кольорами */
+        .queued {
+            background-color: #fff3cd;
+        }
+        .played {
+            background-color: #d0e7ff;
+        }
+        .playing {
+            background-color: #d1ffd1;
+        }
+    </style>
 </head>
-<body>
-    <script>
-// Параметри
-var channelId = "174860188"; // ідентифікатор вашого каналу Twitch
-var currentUsername = "test_user"; // Змінна для зберігання поточного імені користувача
-var customtext = " каже "; // Каже можна замінити на будь що буде виглядати так [Ім'я користувача] + [ця змінна] + [текст повідомлення]
-var canStop = true; // Налаштування для зупинки TTS
+<body class="bg-[#1f1f1f] text-white"> <!-- Changed bg color and added text color -->
 
-// Нагороди
-var rewards = {
-    "Поговори мені ще 😡": {
-        // назва винагороди (має збігатися з назвою винагороди у Twitch з урахуванням регістру)
-        ttsCharacterLimit: 500, // максимальна кількість символів для відправки
-        type: "streamelements", // це не чіпайте
-        voiceId: "uk-UA-Wavenet-A", // ідентифікатор голосу, можете змінити на іншу мову, але цей говорить українською та латинкою/англійською
-        volume: 0.40, // гучність вимірюється 0.0 - 1.0
-    },
-    "Зупини TTS": {
-        // нагорода для зупинки TTS
-        type: "stop",
-    },
+    <!-- Дешборд -->
+    <div class="max-w-4xl mx-auto p-4">
+        <h1 class="text-2xl font-bold text-white">Twitch points</h1><br> <!-- Updated text color -->
+        <div class="flex justify-between items-center">
+            <div class="space-x-4">
+                <button id="skip-btn" class="bg-blue-500 text-white px-4 py-2 rounded">Пропустити</button>
+                <button id="pause-btn" class="bg-yellow-500 text-white px-4 py-2 rounded">Пауза</button>
+            </div>
+        </div>
+
+        <div id="notifications-list" class="mt-4 space-y-2">
+            <!-- Повідомлення будуть додаватися сюди -->
+        </div>
+    </div>
+
+    <script>
+        // Параметри
+        var channelId = "174860188"; // ідентифікатор вашого каналу Twitch
+        var currentUsername = "test_user"; // Змінна для зберігання поточного імені користувача
+        var customtext = " каже "; // Каже можна замінити на будь що буде виглядати так [Ім'я користувача] + [ця змінна] + [текст повідомлення]
+        var canStop = true; // Налаштування для зупинки TTS
+
+        var rewards = {
+            "Поговори мені ще 😡": {
+                ttsCharacterLimit: 500,
+                type: "streamelements",
+                voiceId: "uk-UA-Wavenet-A",
+                volume: 0.40,
+            },
+            "Зупини TTS": {
+                type: "stop",
+            },
+        };
+
+        let currentAudioSource = null;
+        let stopTTS = false;
+        let notifications = [];
+        let isPaused = false; // New flag for pause
+
+        // Function to generate a UUID
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0,
+                    v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // Test function
+        // Render notifications in reverse order
+        function renderNotifications() {
+            const notificationsList = document.getElementById("notifications-list");
+            notificationsList.innerHTML = ""; // Clear the list before rendering
+
+            notifications.slice().reverse().forEach((notif) => {  // slice() is used to create a shallow copy
+                let notifElement = document.createElement("div");
+                notifElement.classList.add("p-4", "rounded", "shadow", "mb-2", "text-black");
+
+                // Set status through class
+                notifElement.classList.add(
+                    notif.status === "queued" ? "queued" :
+                    notif.status === "played" ? "played" :
+                    notif.status === "playing" ? "playing" :
+                    notif.status === "lost" ? "bg-gray-300" : ""
+                );
+
+                // Modify text to handle 'undefined'
+                let displayText = notif.text;
+
+                if (!displayText.includes("undefined")) {
+                    notifElement.innerHTML = ` 
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold">${notif.user}</span>
+                            <span class="text-sm text-gray-600">${notif.title}</span>
+                        </div>
+                        <div class="mt-2">${displayText}</div> 
+                    `;
+                } else {
+                    notifElement.innerHTML = ` 
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold">${notif.user}</span>
+                            <span class="text-sm text-gray-600">${notif.title}</span>
+                        </div>
+                    `;
+                }
+                notificationsList.appendChild(notifElement);
+            });
+        }
+
+        // Test function
+        async function test() {
+            let notif = {
+                id: generateUUID(),
+                title: "Тест TTS",
+                price: 0,
+                user: "test_user",
+                text: "Можете перевірити TTS?",
+                status: "queued",
+            };
+
+            notifications.push(notif);
+            renderNotifications();
+            let reward = rewards["Поговори мені ще 😡"];
+            await textToSpeech(reward, notif.text);
+        }
+
+        // Update textToSpeech function to handle stop TTS action
+        async function textToSpeech(reward, text) {
+            if (reward.type === "stop") {
+                // Stop the TTS if it's running
+                if (canStop && currentAudioSource) {
+                    currentAudioSource.stop();
+                    currentAudioSource = null;
+                    console.log("TTS зупинено");
+                }
+                return;
+            }
+
+            const ctx = new AudioContext();
+            text = text.substring(0, reward["ttsCharacterLimit"]);
+
+            console.log("Текст TTS:", text);
+
+            let url;
+            let sendText = text;
+
+            if (reward["type"] == "streamelements") {
+                url = `https://api.streamelements.com/kappa/v2/speech?voice=${reward["voiceId"]}&text=${sendText}`;
+            } else {
+                throw "Тип TTS не знайдено";
+            }
+
+            var response = await fetch(url);
+            var arrayBuffer = await response.arrayBuffer();
+            var decodedAudio = await ctx.decodeAudioData(arrayBuffer);
+            var gainNode = ctx.createGain();
+            gainNode.connect(ctx.destination);
+            gainNode.gain.value = reward["volume"];
+            const audio = decodedAudio;
+            const source = ctx.createBufferSource();
+            source.buffer = audio;
+            source.connect(gainNode);
+            currentAudioSource = source;
+            source.start();
+
+            return new Promise((resolve) => {
+                source.onended = () => {
+                    currentAudioSource = null;
+                    resolve();
+                };
+            });
+        }
+
+        window.onload = () => {
+            let ws = undefined;
+            let pong = false;
+            let interval = false;
+
+            (async () => {
+                while (true) {
+                    if (notifications.length > 0) {
+                        let notif = notifications.find(n => n.status === "queued");
+                        if (notif && !isPaused) { // Skip if paused
+                            console.log("Розпочато сповіщення", notif);
+
+                            let reward = rewards[notif.title];
+                            if (reward && notif.text != "") {
+                                console.log("Програється TTS");
+                                try {
+                                    notif.status = "playing"; // Позначаємо як в процесі
+                                    renderNotifications();
+                                    await textToSpeech(reward, notif.text);
+                                    console.log("TTS закінчено");
+                                    notif.status = "played"; // Позначаємо як програне
+                                    if (notif.status === "played") {
+                                        renderNotifications();
+                                    }
+                                    
+                                } catch (e) {
+                                    console.log("Помилка TTS:", e);
+                                }
+                            } else {
+                                // Mark the notification as lost if it's not in the rewards variable
+                                notif.status = "lost"; // Mark as lost
+                                renderNotifications();
+                            }
+                            console.log("Закінчено сповіщення");
+                        }
+                    }
+                    await sleep(1000);
+                }
+            })();
+
+            function sleep(miliseconds) {
+                return new Promise((res) => setTimeout(res, miliseconds));
+            }
+
+            function connect() {
+                ws = new WebSocket("wss://pubsub-edge.twitch.tv");
+                listen();
+            }
+
+            function listen() {
+                ws.onmessage = (a) => {
+    let o = JSON.parse(a.data);
+    switch (o.type) {
+        case "PING":
+            ws.send(JSON.stringify({ type: "PONG" }));
+            break;
+        case "PONG":
+            pong = true;
+            break;
+        case "RECONNECT":
+            disconnect();
+            connect();
+            break;
+        case "RESPONCE":
+            console.log("Відповідь PubSub ", o.error);
+            break;
+        case "MESSAGE":
+            switch (o.data.topic) {
+                case `community-points-channel-v1.${channelId}`:
+                    let msg = JSON.parse(o.data.message);
+                    console.log(msg);
+                    if (msg.type === "reward-redeemed") {
+                        let reward = msg.data.redemption.reward;
+                        currentUsername = msg.data.redemption.user.display_name;
+
+                        let notif = {
+                            id: generateUUID(),
+                            title: reward.title,
+                            price: reward.cost,
+                            user: msg.data.redemption.user.display_name,
+                            text: `${currentUsername}${customtext}${msg.data.redemption.user_input}`,
+                            status: "queued", // Спочатку ставимо в чергу
+                        };
+
+                        // Add reward if it exists in rewards object, or mark as 'played' if it exists but not in rewards
+                        if (rewards[reward.title]) {
+                            notifications.push(notif);
+                        } else {
+                            notif.status = "played"; // Mark as played if not found in rewards
+                            notifications.push(notif);
+                        }
+                        renderNotifications();
+                    }
+                    break;
+            }
+            break;
+    }
 };
 
-// -----------------
-// ПАРАМЕТРИ НАЛАГОДЖЕННЯ
-// -----------------
-var testTTSOnLoad = true;
-// режим налагодження для тестування. true = F5 для відтворення тексту
-// false = нічого. Встановіть значення false, якщо ви не плануєте змінювати код.
 
-var testTTS = "Поговори мені ще 😡"; // назва нагороди
-var testText = "Бот працює"; // текст для перевірки
-
-function sleep(miliseconds) {
-    return new Promise((res) => setTimeout(res, miliseconds));
-}
-
-let currentAudioSource = null; // Тримаємо посилання на поточне аудіоджерело
-let stopTTS = false; // Змінна для зупинки TTS
-
-async function textToSpeech(reward, text) {
-    if (reward.type === "stop") {
-        if (canStop && currentAudioSource) {
-            currentAudioSource.stop();
-            currentAudioSource = null;
-            console.log("TTS зупинено");
-        }
-        return;
-    }
-
-    const ctx = new AudioContext();
-
-    // Limit text length
-    text = text.substring(0, reward["ttsCharacterLimit"]);
-
-    console.log("Текст TTS:", text);
-
-    let url;
-    let requestOptions;
-    let sendText = text; // Ініціалізувати sendText оригінальним текстом
-
-    if (currentUsername !== "") {
-        // Умовно змінити sendText на основі ваших вимог
-        sendText = `${sendText}`;
-    }
-
-    if (reward["type"] == "streamelements") {
-        url = `https://api.streamelements.com/kappa/v2/speech?voice=${reward["voiceId"]}&text=${sendText}`;
-    } else {
-        throw "Тип TTS не знайдено";
-    }
-
-    // fetch() повертає обіцянку, що
-    // вирішується після отримання заголовків
-    var response = await fetch(url, requestOptions);
-
-    var arrayBuffer = await response.arrayBuffer();
-    var decodedAudio = await ctx.decodeAudioData(arrayBuffer);
-    var gainNode = ctx.createGain();
-    gainNode.connect(ctx.destination);
-    gainNode.gain.value = reward["volume"];
-    const audio = decodedAudio;
-    const source = ctx.createBufferSource();
-    source.buffer = audio;
-    source.connect(gainNode);
-    currentAudioSource = source; // Зберегти поточне аудіоджерело
-    source.start();
-    return new Promise((resolve, reject) => {
-        source.onended = () => {
-            currentAudioSource = null; // Скинути після завершення
-            resolve();
-        };
-        source.onended = () => {
-            if (stopTTS) {
-                currentAudioSource = null; // Скинути після завершення
-                stopTTS = false; // Скинути прапорець зупинки
-                resolve();
-            } else {
-                resolve();
-            }
-        };
-    });
-}
-
-window.onload = () => {
-    let ws = undefined;
-    let pong = false;
-    let interval = false;
-
-    let notifications = [];
-
-    (async () => {
-        while (true) {
-            if (notifications.length > 0) {
-                let notif = notifications.pop();
-                console.log("Розпочато сповіщення", notif);
-
-                let reward = rewards[notif.title];
-                if (reward && notif.text != "") {
-                    console.log("Програється TTS");
-                    try {
-                        await textToSpeech(reward, notif.text);
-                        console.log("TTS закінчено");
-                    } catch (e) {
-                        console.log("Помилка TTS:", e);
-                    }
-                }
-                console.log("Закінчено сповіщення");
-            }
-            await sleep(1000);
-        }
-    })();
-
-    function connect() {
-        ws = new WebSocket("wss://pubsub-edge.twitch.tv");
-        listen();
-    }
-    function disconnect() {
-        if (interval) {
-            clearInterval(interval);
-            interval = false;
-        }
-        ws.close();
-    }
-
-    function listen() {
-        ws.onmessage = (a) => {
-            let o = JSON.parse(a.data);
-            switch (o.type) {
-                case "PING":
+                ws.onopen = () => {
                     ws.send(
                         JSON.stringify({
-                            type: "PONG",
+                            type: "LISTEN",
+                            nonce: "pepega",
+                            data: {
+                                topics: ["community-points-channel-v1." + channelId],
+                                auth_token: "",
+                            },
                         })
                     );
-                    break;
-                case "PONG":
-                    pong = true;
-                    break;
-                case "RECONNECT":
-                    disconnect();
-                    connect();
-                    break;
-                case "RESPONCE":
-                    console.log("Відповідь PubSub ", o.error);
-                    break;
-                case "MESSAGE":
-                    switch (o.data.topic) {
-                        case `community-points-channel-v1.${channelId}`:
-                            let msg = JSON.parse(o.data.message);
-                            console.log(msg);
-                            switch (msg.type) {
-                                case "reward-redeemed":
-                                    let reward = msg.data.redemption.reward;
-                                    currentUsername = msg.data.redemption.user.display_name;
-
-                                    let notif = {
-                                        title: reward.title,
-                                        price: reward.cost,
-                                        user: msg.data.redemption.user.display_name,
-                                        // Включаємо ім'я користувача в текст
-                                        text: `${currentUsername}${customtext}${msg.data.redemption.user_input}`, 
-                                    };
-                                    console.log("Сповіщення в черзі ", notif);
-                                    console.log("Користувач ", currentUsername);
-                                    
-                                    // Негайна обробка "Зупини TTS"
-                                    if (notif.title === "Зупини TTS" && canStop) {
-                                        stopTTS = true;
-                                        if (currentAudioSource) {
-                                            currentAudioSource.stop();
-                                            currentAudioSource = null;
-                                            console.log("TTS зупинено");
-                                        }
-                                    } else {
-                                        notifications.push(notif);
-                                    }
-                                    break;
-                            }
-                            break;
-                    }
-                    break;
-            }
-        };
-        ws.onopen = () => {
-            if (testTTSOnLoad) {
-                let notif = {
-                    title: testTTS,
-                    price: 5000,
-                    user: "test_user",
-                    text: currentUsername + customtext + testText,
+                    interval = setInterval(async () => {
+                        ws.send(JSON.stringify({ type: "PING" }));
+                        await sleep(5000);
+                        if (pong) {
+                            pong = false;
+                        } else {
+                            pong = false;
+                            disconnect();
+                            connect();
+                        }
+                    }, 5 * 60 * 1000);
                 };
-                console.log("Сповіщення в черзі", notif);
-                notifications.push(notif);
             }
 
-            ws.send(
-                JSON.stringify({
-                    type: "LISTEN",
-                    nonce: "pepega",
-                    data: {
-                        topics: ["community-points-channel-v1." + channelId],
-                        auth_token: "",
-                    },
-                })
-            );
-            interval = setInterval(async () => {
-                ws.send(
-                    JSON.stringify({
-                        type: "PING",
-                    })
-                );
-                await sleep(5000);
-                if (pong) {
-                    pong = false;
-                } else {
-                    pong = false;
-                    disconnect();
-                    connect();
+           
+
+
+            // Кнопка пропустити
+            document.getElementById("skip-btn").onclick = () => {
+                // Stop current TTS
+                if (currentAudioSource) {
+                    currentAudioSource.stop();
+                    currentAudioSource = null;
                 }
-            }, 5 * 60 * 1000);
+                // Move the current playing notification to played
+                notifications.forEach((notif) => {
+                    if (notif.status === "playing") {
+                        notif.status = "played";
+                    }
+                });
+                renderNotifications();
+            };
+
+            // Кнопка паузи
+            document.getElementById("pause-btn").onclick = () => {
+                isPaused = !isPaused;
+                document.getElementById("pause-btn").textContent = isPaused ? "Відновити" : "Пауза";
+            };
+
+            connect();
         };
-    }
-
-    connect();
-};
-
-</script>
+    </script>
 </body>
 </html>
