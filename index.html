@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Нагороди Twitch TTS</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* Налаштування для більш точного контролю над кольорами */
         .queued {
@@ -25,8 +26,15 @@
         <h1 class="text-2xl font-bold text-white">Twitch points</h1><br> <!-- Updated text color -->
         <div class="flex justify-between items-center">
             <div class="space-x-4">
-                <button id="skip-btn" class="bg-blue-500 text-white px-4 py-2 rounded">Пропустити</button>
-                <button id="pause-btn" class="bg-yellow-500 text-white px-4 py-2 rounded">Пауза</button>
+                <button id="skip-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors" title="Пропустити">
+                    <i class="fas fa-forward"></i>
+                </button>
+                <button id="pause-btn" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors" title="Пауза">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button id="popup-btn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors" title="Відкрити в popup">
+                    <i class="fas fa-external-link-alt"></i>
+                </button>
             </div>
         </div>
 
@@ -320,7 +328,30 @@
             // Кнопка паузи
             document.getElementById("pause-btn").onclick = () => {
                 isPaused = !isPaused;
-                document.getElementById("pause-btn").textContent = isPaused ? "Відновити" : "Пауза";
+                const pauseBtn = document.getElementById("pause-btn");
+                if (isPaused) {
+                    pauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+                    pauseBtn.title = "Відновити";
+                } else {
+                    pauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                    pauseBtn.title = "Пауза";
+                }
+            };
+
+            // Кнопка popup
+            document.getElementById("popup-btn").onclick = () => {
+                const currentUrl = window.location.href;
+                const popupWindow = window.open(
+                    currentUrl,
+                    'TwitchTTSPopup',
+                    'width=800,height=600,scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no'
+                );
+                
+                if (popupWindow) {
+                    popupWindow.focus();
+                } else {
+                    alert('Popup заблокований браузером. Будь ласка, дозвольте popup для цього сайту.');
+                }
             };
 
             connect();
